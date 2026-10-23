@@ -18,13 +18,18 @@ pipeline {
         stage('Select Image') {
             steps {
                 script {
-                    if (env.BRANCH_NAME == 'master') {
-                        env.IMAGE_NAME = "${DOCKERHUB_NAMESPACE}/prod"
-                    } else if (env.BRANCH_NAME == 'dev') {
-                        env.IMAGE_NAME = "${DOCKERHUB_NAMESPACE}/dev"
-                    } else {
-                        error("Unsupported branch: ${env.BRANCH_NAME}")
-                    }
+                    def branch = sh(
+    script: 'git branch --show-current',
+    returnStdout: true
+).trim()
+
+if (branch == 'master') {
+    env.IMAGE_NAME = "${DOCKERHUB_NAMESPACE}/prod"
+} else if (branch == 'dev') {
+    env.IMAGE_NAME = "${DOCKERHUB_NAMESPACE}/dev"
+} else {
+    error("Unsupported branch: ${branch}")
+}
 
                     env.IMAGE_TAG = env.BUILD_NUMBER
                     echo "Branch: ${env.BRANCH_NAME}"
