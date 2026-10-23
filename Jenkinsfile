@@ -81,9 +81,9 @@ pipeline {
         }
 
         stage('Deploy Development') {
-            when {
-                expression { env.BRANCH_NAME == 'dev' }
-            }
+    when {
+        expression { env.JOB_NAME == 'DevOps-Build-Pipeline' }
+    }
             steps {
                 sshagent(credentials: ['app-server-ssh-key']) {
                     sh '''
