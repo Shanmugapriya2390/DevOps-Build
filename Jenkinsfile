@@ -1,9 +1,8 @@
-
 pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = 'shanmugapriya2390/dev'
+        DOCKERHUB_NAMESPACE = 'shanmugapriya2390'
         APP_HOST = '172.31.15.240'
         APP_USER = 'ubuntu'
         CONTAINER_NAME = 'devops-build-app'
@@ -16,10 +15,28 @@ pipeline {
             }
         }
 
+        stage('Select Image') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'master') {
+                        env.IMAGE_NAME = "${DOCKERHUB_NAMESPACE}/prod"
+                    } else if (env.BRANCH_NAME == 'dev') {
+                        env.IMAGE_NAME = "${DOCKERHUB_NAMESPACE}/dev"
+                    } else {
+                        error("Unsupported branch: ${env.BRANCH_NAME}")
+                    }
+
+                    env.IMAGE_TAG = env.BUILD_NUMBER
+                    echo "Branch: ${env.BRANCH_NAME}"
+                    echo "Image: ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+                }
+            }
+        }
+
         stage('Verify Project') {
             steps {
                 sh '''
-                    set -e
+                    set -eu
                     test -f Dockerfile
                     test -f build/index.html
                     echo "Project files verified."
@@ -30,10 +47,10 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh '''
-                    set -e
+                    set -eu
                     docker build \
-                      -t ${IMAGE_NAME}:${BUILD_NUMBER} \
-                      -t ${IMAGE_NAME}:latest \
+                      -t "$IMAGE_NAME:$IMAGE_TAG" \
+                      -t "$IMAGE_NAME:latest" \
                       .
                 '''
             }
@@ -55,50 +72,31 @@ pipeline {
                           --username "$DOCKERHUB_USERNAME" \
                           --password-stdin
 
-                        docker push ${IMAGE_NAME}:${BUILD_NUMBER}
-                        docker push ${IMAGE_NAME}:latest
+                        docker push "$IMAGE_NAME:$IMAGE_TAG"
+                        docker push "$IMAGE_NAME:latest"
                         docker logout
                     '''
                 }
             }
         }
 
-        stage('Deploy to App EC2') {
+        stage('Deploy Development') {
+            when {
+                expression { env.BRANCH_NAME == 'dev' }
+            }
             steps {
                 sshagent(credentials: ['app-server-ssh-key']) {
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'dockerhub-credentials',
-                            usernameVariable: 'DOCKERHUB_USERNAME',
-                            passwordVariable: 'DOCKERHUB_TOKEN'
-                        )
-                    ]) {
-                        sh '''
-                            set -eu
-                            set +x
-
-                            printf '%s' "$DOCKERHUB_TOKEN" | \
-                              ssh -o StrictHostKeyChecking=accept-new \
-                              ${APP_USER}@${APP_HOST} \
-                              "docker login --username '$DOCKERHUB_USERNAME' --password-stdin"
-
-                            ssh -o StrictHostKeyChecking=accept-new \
-                              ${APP_USER}@${APP_HOST} \
-                              "sudo docker pull ${IMAGE_NAME}:${BUILD_NUMBER} &&
-                               sudo docker rm -f ${CONTAINER_NAME} 2>/dev/null || true
-                               sudo docker run -d --name ${CONTAINER_NAME} \
-                                 --restart unless-stopped -p 80:80 \
-                                 ${IMAGE_NAME}:${BUILD_NUMBER}"
-
-                            ssh -o StrictHostKeyChecking=accept-new \
-                              ${APP_USER}@${APP_HOST} \
-                              "sudo docker image prune -f"
-
-                            ssh -o StrictHostKeyChecking=accept-new \
-                              ${APP_USER}@${APP_HOST} \
-                              "curl -fsS http://localhost/ >/dev/null"
-                        '''
-                    }
+                    sh '''
+                        set -eu
+                        ssh -o StrictHostKeyChecking=accept-new \
+                          "$APP_USER@$APP_HOST" \
+                          "sudo docker pull $IMAGE_NAME:$IMAGE_TAG &&
+                           sudo docker rm -f $CONTAINER_NAME &&
+                           sudo docker run -d --name $CONTAINER_NAME \
+                             --restart unless-stopped -p 80:80 \
+                             $IMAGE_NAME:$IMAGE_TAG &&
+                           curl -fsS http://localhost/ >/dev/null"
+                    '''
                 }
             }
         }
@@ -106,10 +104,10 @@ pipeline {
 
     post {
         success {
-            echo 'Development image built, pushed, and deployed successfully.'
+            echo 'Image build and push completed successfully.'
         }
         failure {
-            echo 'Pipeline failed. Check Console Output for the failing stage.'
+            echo 'Pipeline failed. Review Console Output.'
         }
     }
 }
