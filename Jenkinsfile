@@ -15,29 +15,24 @@ pipeline {
             }
         }
 
-        stage('Select Image') {
-            steps {
-                script {
-                    def branch = sh(
-    script: 'git branch --show-current',
-    returnStdout: true
-).trim()
-
-if (branch == 'master') {
-    env.IMAGE_NAME = "${DOCKERHUB_NAMESPACE}/prod"
-} else if (branch == 'dev') {
-    env.IMAGE_NAME = "${DOCKERHUB_NAMESPACE}/dev"
-} else {
-    error("Unsupported branch: ${branch}")
-}
-
-                    env.IMAGE_TAG = env.BUILD_NUMBER
-                    echo "Branch: ${env.BRANCH_NAME}"
-                    echo "Image: ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-                }
+       stage('Select Image') {
+    steps {
+        script {
+            if (env.JOB_NAME == 'Prod-Build-Pipeline') {
+                env.IMAGE_NAME = 'shanmugapriya2390/prod'
+            } else if (env.JOB_NAME == 'DevOps-Build-Pipeline') {
+                env.IMAGE_NAME = 'shanmugapriya2390/dev'
+            } else {
+                error("Unsupported Jenkins job: ${env.JOB_NAME}")
             }
-        }
 
+            env.IMAGE_TAG = env.BUILD_NUMBER
+
+            echo "Jenkins job: ${env.JOB_NAME}"
+            echo "Image: ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+        }
+    }
+}
         stage('Verify Project') {
             steps {
                 sh '''
