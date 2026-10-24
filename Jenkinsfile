@@ -80,26 +80,34 @@ pipeline {
             }
         }
 
-        stage('Deploy Development') {
+        
+stage('Deploy Production') {
     when {
-        expression { env.JOB_NAME == 'DevOps-Build-Pipeline' }
-    }
-            steps {
-                sshagent(credentials: ['app-server-ssh-key']) {
-                    sh '''
-                        set -eu
-                        ssh -o StrictHostKeyChecking=accept-new \
-                          "$APP_USER@$APP_HOST" \
-                          "sudo docker pull $IMAGE_NAME:$IMAGE_TAG &&
-                           sudo docker rm -f $CONTAINER_NAME &&
-                           sudo docker run -d --name $CONTAINER_NAME \
-                             --restart unless-stopped -p 80:80 \
-                             $IMAGE_NAME:$IMAGE_TAG &&
-                           curl -fsS http://localhost/ >/dev/null"
-                    '''
-                }
-            }
+        expression {
+            env.JOB_NAME == 'Prod-Build-Pipeline'
         }
+    }
+    steps {
+        sshagent(credentials: ['app-server-ssh-key']) {
+            sh '''
+                set -eu
+
+                ssh -o StrictHostKeyChecking=accept-new \
+                  ubuntu@172.31.8.160 \
+                  "sudo docker pull shanmugapriya2390/prod:$IMAGE_TAG &&
+                   sudo docker rm -f devops-build-prod &&
+                   sudo docker run -d \
+                     --name devops-build-prod \
+                     --restart unless-stopped \
+                     -p 80:80 \
+                     shanmugapriya2390/prod:$IMAGE_TAG &&
+                   sleep 3 &&
+                   curl -fsS http://localhost/ >/dev/null"
+            '''
+        }
+    }
+}
+
     }
 
     post {
